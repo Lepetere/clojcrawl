@@ -11,6 +11,7 @@
 	"nbsp"])
 
 (defn getLinkAddress
+	"searches an anchor tag for a href attribute and returns its link address"
 	[datastring]
 	;only proceed if a tag contains "href"
 	(if (.contains datastring "href")
@@ -27,8 +28,13 @@
 	[datastring]
 	;filter out empty strings, html comments and closing tags
 	(if (and (not (clojure.string/blank? datastring))  (and (not= (first datastring) \!) (not= (first datastring) \/)))
-		(if (= (first datastring) \a) 
-			(getLinkAddress datastring)
+		;only proceed if is an anchor tag
+		(if (= (first datastring) \a)
+			(let [linkAddress (getLinkAddress datastring)]
+				(if (not= (first linkAddress) \#)
+					(str linkAddress)
+				)
+			)
 		)
 	)
 )
@@ -59,7 +65,7 @@
 	)
 )
 
-(defn collectKeywords
+(defn collectAndInsertKeywords
 	"This method counts the occurrences of all keywords and adds them to the given keyword map"
 	[datastring]
 	(comment (into (:keywords crawldata) keywords))
@@ -67,20 +73,23 @@
 
 (defn doParse [datastring url]
 
-	(loop [position 0 keywords [] links []]
-		;find next tag beginning
-		(let [nextposition (.indexOf datastring "<" position)]
-			;only proceed if there is a next tag
-			(if (not= nextposition -1)
+	(loop [position 0 keywords [] links #{}]
+
+		;end loop if there no more tag beginnings
+		(if (not= (.indexOf datastring "<" position) -1)
+			(let [
+				;find next tag beginning
+				nextposition (.indexOf datastring "<" position)
 				;get the next keywords, if there is space between the last and the next tag, otherwise pass nil
-				(let [keywordsvec (if (< position (dec nextposition)) (processFreeText (subs datastring position nextposition)) nil)]
-					;find the end of the tag
-					(let [oneFurtherPosition (.indexOf datastring ">" nextposition) link (processTag (subs datastring (inc nextposition) oneFurtherPosition))]
-						(recur (inc oneFurtherPosition) (into keywords keywordsvec) (conj links link))
-					)
-				)
-				(sorted-map :url url, :keywords keywords, :links links)
-			)
+				keywordsvec (if (< position (dec nextposition)) (processFreeText (subs datastring position nextposition)) nil)
+				;find the end of the tag
+				oneFurtherPosition (.indexOf datastring ">" nextposition) 
+				link (processTag (subs datastring (inc nextposition) oneFurtherPosition))]
+
+							(recur (inc oneFurtherPosition) (into keywords keywordsvec) (conj links link))
+						)
+
+			(sorted-map :url url, :keywords keywords, :links links)
 		)
 	)
 )
