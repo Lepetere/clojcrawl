@@ -7,6 +7,7 @@
 	"prints out a report after the crawl procedure"
 	[crawldata]
 
+	(println "url crawled:   " (pr-str (:url crawldata)))
 	(println "links found:   " (pr-str (:links crawldata)))
 	(println "keywords found:   " (pr-str (:keywords crawldata)))
 )

@@ -25,6 +25,7 @@
 )
 
 (defn processTag
+	"takes a string containing an html tag and checks if it's an anchor tag"
 	[datastring]
 	;filter out empty strings, html comments and closing tags
 	(if (and (not (clojure.string/blank? datastring))  (and (not= (first datastring) \!) (not= (first datastring) \/)))
@@ -67,8 +68,8 @@
 
 (defn collectAndInsertKeywords
 	"This method counts the occurrences of all keywords and adds them to the given keyword map"
-	[datastring]
-	(comment (into (:keywords crawldata) keywords))
+	[crawldataKeywordMap newFoundKeywords]
+		(into crawldataKeywordMap newFoundKeywords)
 )
 
 (defn doParse [datastring url]
@@ -80,13 +81,21 @@
 			(let [
 				;find next tag beginning
 				nextposition (.indexOf datastring "<" position)
-				;get the next keywords, if there is space between the last and the next tag, otherwise pass nil
-				keywordsvec (if (< position (dec nextposition)) (processFreeText (subs datastring position nextposition)) nil)
-				;find the end of the tag
-				oneFurtherPosition (.indexOf datastring ">" nextposition) 
-				link (processTag (subs datastring (inc nextposition) oneFurtherPosition))]
 
-							(recur (inc oneFurtherPosition) (into keywords keywordsvec) (conj links link))
+				;find the end of the tag
+				oneFurtherPosition (.indexOf datastring ">" nextposition)]
+
+							(recur
+								;increase the position of the last tag's end by one
+								(inc oneFurtherPosition)
+								;add the next keywords, if there is space between the last and the next tag, otherwise just pass keyword map
+								(if (< position (dec nextposition)) 
+									(collectAndInsertKeywords keywords (processFreeText (subs datastring position nextposition))) 
+									keywords
+								)
+								;add a potentially found link address to the link set
+								(conj links (processTag (subs datastring (inc nextposition) oneFurtherPosition)))
+							)
 						)
 
 			(sorted-map :url url, :keywords keywords, :links links)
