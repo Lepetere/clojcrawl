@@ -69,12 +69,28 @@
 (defn collectAndInsertKeywords
 	"This method counts the occurrences of all keywords and adds them to the given keyword map"
 	[crawldataKeywordMap newFoundKeywords]
-		(into crawldataKeywordMap newFoundKeywords)
+
+		(loop [keywordMap crawldataKeywordMap keywordVector newFoundKeywords]
+			(if (empty? keywordVector)
+				keywordMap
+				;keywordVector not empty, insert next keyword into map:
+				(recur
+					(let [keywordCount (get keywordMap (first keywordVector))]
+						(assoc keywordMap (first keywordVector) (if (nil? keywordCount) 1 (inc keywordCount))) ;(assoc map key val)
+					)
+					(rest keywordVector)
+				)
+			)
+		)
 )
 
-(defn doParse [datastring url]
+(defn doParse 
 
-	(loop [position 0 keywords [] links #{}]
+	"This method separates tags and text between tags; call this method to start the parsing process"
+
+	[datastring url]
+
+	(loop [position 0 keywords {} links #{}]
 
 		;end loop if there no more tag beginnings
 		(if (not= (.indexOf datastring "<" position) -1)
@@ -98,6 +114,7 @@
 							)
 						)
 
+			;quit loop and return hash map with the crawl data
 			(sorted-map :url url, :keywords keywords, :links links)
 		)
 	)

@@ -10,10 +10,31 @@
 	(println "url crawled:   " (pr-str (:url crawldata)))
 	(println "links found:   " (pr-str (:links crawldata)))
 	(println "keywords found:   " (pr-str (:keywords crawldata)))
+	(println "urls crawled:   " "?")
 )
 
 (defn crawl [starturl depth]
-	;(def theresultvecmap vector)
+
+	(comment (loop [crawlQueue starturl currentDepth 0 crawldata {}]
+
+		;check if url already has been crawled
+		(if (contains? crawldata (first crawlQueue))
+			;continue loop with next url
+			(recur (rest crawlQueue) (inc (:depth (first crawlQueue))) crawldata)
+			;parse the url
+			(let [httpResponse (http-kit/get (first crawlQueue)) 
+					siteDataSet (parser/doParse (:body @httpResponse) (comment currentDepth))] ;TO DO: statt starturl sollte depth übergeben werden
+
+					(if (= (:depth siteDataSet) depth)
+						;stop crawling process
+						(assoc crawldata (first crawlQueue) siteDataSet)
+						;else continue working through crawl queue
+						(recur (rest (into crawlQueue (:links siteDataSet))) (inc (:depth (first crawlQueue))) (assoc crawldata (first crawlQueue) siteDataSet))
+					)
+			)
+		)
+	))
+
 
 	(let [response1 (http-kit/get starturl)]
 		;; Other keys :headers :body :error :opts
