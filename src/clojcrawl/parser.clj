@@ -93,7 +93,7 @@
 	(loop [position 0 keywords {} links #{}]
 
 		;end loop if there no more tag beginnings
-		(if (not= (.indexOf datastring "<" position) -1)
+		(if (and (not (nil? datastring)) (not= (.indexOf datastring "<" position) -1))
 			(let [
 				;find next tag beginning
 				nextposition (.indexOf datastring "<" position)
@@ -115,7 +115,7 @@
 						)
 
 			;quit loop and return hash map with the crawl data
-			(sorted-map :depth depth, :keywords keywords, :links (filter #(not (or (= % "") (nil? %))) links))
+			(sorted-map :depth depth, :keywords keywords, :links (filter #(and (not (or (= % "") (nil? %))) (.startsWith % "http:")) links))
 		)
 	)
 )
