@@ -16,10 +16,10 @@
 	;only proceed if a tag contains "href"
 	(if (.contains datastring "href")
 		(let [urlposition (+ (.indexOf datastring "href=") 6) 
-				findurlend (.indexOf datastring " " urlposition) 
-					urlend (if (not (< findurlend 0)) (dec findurlend) (- (count datastring) 1))]
+				findurlend (.indexOf datastring " " (+ urlposition 3)) ;plus 3 is a workaround because href content can start with whitespace
+					urlend (if (not (or (< findurlend 0) (> findurlend (count datastring)))) (dec findurlend) (- (count datastring) 1))]
 
-						(subs datastring urlposition urlend)
+						(if (not (< (- urlend urlposition) 0)) (subs datastring urlposition urlend) nil)
 		)
 	)
 )
