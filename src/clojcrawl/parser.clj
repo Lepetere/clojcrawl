@@ -88,7 +88,7 @@
 
 	"This method separates tags and text between tags; call this method to start the parsing process"
 
-	[datastring url]
+	[datastring depth]
 
 	(loop [position 0 keywords {} links #{}]
 
@@ -115,7 +115,7 @@
 						)
 
 			;quit loop and return hash map with the crawl data
-			(sorted-map :url url, :keywords keywords, :links links)
+			(sorted-map :depth depth, :keywords keywords, :links (filter #(not (or (= % "") (nil? %))) links))
 		)
 	)
 )
