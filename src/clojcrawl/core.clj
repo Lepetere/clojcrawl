@@ -16,30 +16,32 @@
 
 (defn crawl [starturl depth printResults]
 
-	(loop [crawlQueue [{:url starturl, :depth 0}] currentDepth 0 crawldata {}]		
+	(loop [crawlQueue (-> (clojure.lang.PersistentQueue/EMPTY) (conj {:url starturl, :depth 0})) 
+			crawldata {:amountOfUrlsCrawled 0}]		
 
-		(if (> (:depth (first crawlQueue)) depth)
-			;if maximum depth is reached, stop crawling process
+		(if (or (empty? crawlQueue) (> (:depth (first crawlQueue)) depth))
+			;if maximum depth is reached or queue is empty, stop crawling process
 			crawldata
 
 			;check if url already has been crawled
 			(if (contains? crawldata (:url (first crawlQueue)))
 				;continue loop with next url
-				(recur (rest crawlQueue) (inc (:depth (first crawlQueue))) crawldata)
+				(recur (pop crawlQueue) crawldata)
 
 				;else parse the url
 				(let [httpResponse (http-kit/get (:url (first crawlQueue))) 
-						siteDataSet (parser/doParse (:body @httpResponse) currentDepth)]
+						siteDataSet (parser/doParse (:body @httpResponse) (:depth (first crawlQueue)))]
 
 					(do
 						;print data set if wanted
 						(if (true? printResults) (printReport (:url (first crawlQueue)) siteDataSet))
 								
 						;continue working through crawl queue
-						(recur 
-							(rest (into crawlQueue (map #(sorted-map :url % :depth (inc currentDepth)) (:links siteDataSet)))) 
-							(inc (:depth (first crawlQueue))) 
-							(assoc crawldata (:url (first crawlQueue)) siteDataSet)
+						(recur
+							;update crawlqueue -> pop element, add new found links (as maps with the right depth value)
+							(pop (into crawlQueue (map #(sorted-map :url % :depth (inc (:depth (first crawlQueue)))) (:links siteDataSet))))
+							;put new site data set in crawldata map, increase the amount of crawled sites
+							(-> (assoc crawldata (:url (first crawlQueue)) siteDataSet) (assoc :amountOfUrlsCrawled (inc (:amountOfUrlsCrawled crawldata))))
 						)
 					)
 				)
@@ -50,7 +52,6 @@
 
 (defn -main [& args] ;first argument has to be the start url, second the search depth
 
-	(crawl (nth args 0) (Integer/parseInt (nth args 1)) true)
+	(println "Total URLs crawled:  " (:amountOfUrlsCrawled (crawl (nth args 0) (Integer/parseInt (nth args 1)) true)))
 
-	nil
 )
