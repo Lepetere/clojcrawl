@@ -1,15 +1,7 @@
 (ns clojcrawl.core
   (:require [org.httpkit.client :as http-kit])
-  (:require [clojcrawl.parser :as parser]))
-
-(defn print-report
-  "prints out a report of a site data set"
-  [url crawldata]
-  (println "url:              " url)
-  (println "depth:            " (pr-str (:depth crawldata)))
-  (println "keywords found:   " (pr-str (:keywords crawldata)))
-  (println "links found:      " (pr-str (:links crawldata)))
-  (println))
+  (:require [clojcrawl.parser :as parser]
+            [clojcrawl.data-sink :as data-sink]))
 
 (defn crawl [starturl depth printResults]
   (loop [crawlQueue (-> (clojure.lang.PersistentQueue/EMPTY) (conj {:url starturl, :depth 0})) 
@@ -26,7 +18,7 @@
 			  siteDataSet (parser/do-parse (:body @httpResponse) (:depth (first crawlQueue)))]
           (do
             ;;print data set if wanted
-            (if (true? printResults) (print-report (:url (first crawlQueue)) siteDataSet))
+            (if (true? printResults) (data-sink/print-report (:url (first crawlQueue)) siteDataSet))
             ;;continue working through crawl queue
             (recur
             ;;update crawlqueue -> pop element, add new found links (as maps with the right depth value)
