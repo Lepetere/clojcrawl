@@ -3,7 +3,11 @@
   (:require [clojcrawl.parser :as parser]
             [clojcrawl.data-sink :as data-sink]))
 
-(defn crawl [starturl depth printResults]
+(def ^:const default-number-of-concurrent-requests 10)
+
+(defn crawl 
+  [starturl depth number-of-concurrent-requests print-results]
+  (println "\nnumber of concurrent requests: " number-of-concurrent-requests "\n")
   (loop [crawlQueue (-> (clojure.lang.PersistentQueue/EMPTY) (conj {:url starturl, :depth 0})) 
 		 crawldata {:amountOfUrlsCrawled 0}]		
     (if (or (empty? crawlQueue) (> (:depth (first crawlQueue)) depth))
@@ -18,7 +22,7 @@
 			  siteDataSet (parser/do-parse (:body @httpResponse) (:depth (first crawlQueue)))]
           (do
             ;;print data set if wanted
-            (if (true? printResults) (data-sink/print-report (:url (first crawlQueue)) siteDataSet))
+            (if (true? print-results) (data-sink/print-report (:url (first crawlQueue)) siteDataSet))
             ;;continue working through crawl queue
             (recur
             ;;update crawlqueue -> pop element, add new found links (as maps with the right depth value)
@@ -26,5 +30,16 @@
             ;;put new site data set in crawldata map, increase the amount of crawled sites
             (-> (assoc crawldata (:url (first crawlQueue)) siteDataSet) (assoc :amountOfUrlsCrawled (inc (:amountOfUrlsCrawled crawldata)))))))))))
 
-(defn -main [& args] ;first argument has to be the start url, second the search depth
-  (println "Total URLs crawled:  " (:amountOfUrlsCrawled (crawl (nth args 0) (Integer/parseInt (nth args 1)) true))))
+(defn -main 
+  "Call like this: lein run 'http://www.peterfessel.com' 2 5
+
+  First argument has to be the start url, second the search depth.
+
+  The third argument is the number of requests that the crawler should run concurrently. It is optional and will default to 10 if omitted."
+  [& args]
+  (println "Total URLs crawled:  " 
+    (:amountOfUrlsCrawled (crawl 
+      (nth args 0) 
+      (Integer/parseInt (nth args 1))
+      (if (<= (count args) 2) default-number-of-concurrent-requests (Integer/parseInt (nth args 2)))
+      true))))
