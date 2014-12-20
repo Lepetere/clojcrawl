@@ -3,17 +3,13 @@
   (:require [clojcrawl.parser :as parser]
             [clojcrawl.data-sink :as data-sink]))
 
-;; the number of concurrent requests that the crawling defaults to if no number is passed by the user explicitely
 (def ^:dynamic number-of-concurrent-requests 10)
+(def ^:dynamic maximum-crawl-depth)
 
-;; this watch observes the size of the running-requests atom and launches new requests
-(def running-requests-watch
-  [key identity old new]
-  (println "Concurrent requests: " (count new))
-  (if (< (count new) number-of-concurrent-requests)
-    (launch-next-crawl)))
+(declare running-requests-watch)
 
 ;; running-requests contains the futures of running Http GETs with the crawled url as key
+;; can be seen as a thread pool
 (def running-requests (add-watch (atom {}) :requests-watch running-requests-watch))
 ;; contains the already crawled urls to a certain size
 (def crawled-urls (atom #{}))
@@ -29,12 +25,23 @@
   [url]
   (contains? @crawled-urls url))
 
+(defn maximum-depth-reached?
+  "Checks if the first element of the crawl queue has reached the maximum crawl depth."
+  [url-queue]
+  (> (:depth (meta (first url-queue))) maximum-crawl-depth))
+
 (defn register-crawled-url
   "Adds a url that has already been crawled to the crawled-urls atom,
   so it will not be crawled again."
   ;; TO DO: keep an eye on the size of the set; could also happen via a watch on the atom
   [url]
   (swap! crawled-urls conj url))
+
+(defn add-links-to-crawl-queue
+  "Adds an unordered set of links to the urls-to-be-crawled agent.
+  Sets the :depth meta data of the links according to the depth passed as second argument."
+  [url-queue links depth]
+  (into url-queue (map #(with-meta % {:depth depth}) links)))
 
 (defn fire-request
   "Launches the GET of a url in a new future that is then stored in the running-requests atom.
@@ -44,9 +51,9 @@
   [url]
   (swap! running-requests assoc url
     (future 
-      (let [http-response @(http-kit/get url)]
-        ;; parse the response and send the data to the data sink
-        (data-sink/print-report (parser/do-parse (:body @httpResponse) (:depth (meta url))))
+      (let [crawldata (parser/do-parse (:body @(http-kit/get url)) (:depth (meta url)))]
+        (send urls-to-be-crawled add-links-to-crawl-queue (:links crawldata) (:depth (meta url)))
+        (data-sink/print-report crawldata)
         ;; then remove this future from the running-requests atom
         (swap! running-requests dissoc url)))))
 
@@ -59,24 +66,38 @@
   (swap! running-requests dissoc url))
 
 (defn take-url
-  "Launches a crawl of the next url on the crawl queue that hasn't been crawled yet.
+  "Launches a crawl of the next url on the crawl queue. The method makes sure to only crawl urls which 
+  haven't been crawled yet and stops the crawling process if there are no more urls in the crawl-queue.
+
   Takes as an argument the url queue, so it can be applied to the agent containing the queue."
   [url-queue]
   (loop [url-queue url-queue]
-    (let [url (first url-queue)]
-      (if (is-url-already-crawled? url) 
+    (if (< (count url-queue) 1)
+      (throw (Exception. "No more urls to crawl in the url queue.")) ; TO DO: start a new thread, wait some time, then try again, if still empty throw an error
+      (if (is-url-already-crawled? (first url-queue))
         (recur (pop url-queue))
-        (launch-crawl url)))))
+        (if (maximum-depth-reached? url-queue)
+          (throw (Exception. "Maximum crawl depth reached."))
+          (do
+            (fire-request (first url-queue))
+            (pop url-queue)))))))
 
 (defn launch-next-crawl
   "Starts a crawl of the next url."
   []
   (send-off urls-to-be-crawled take-url))
 
+;; this watch observes the size of the running-requests atom and launches new requests
+(defn running-requests-watch
+  [key identity old new]
+  (println "Concurrent requests: " (count new))
+  (if (< (count new) number-of-concurrent-requests)
+    (launch-next-crawl)))
+
 (defn launch-crawl
   "Launches the crawler."
-  [starturl depth number-of-concurrent-requests print-results]
-  nil)
+  [starturl maximum-depth number-of-concurrent-requests]
+  (fire-request (with-meta starturl {:depth 0})))
 
 (defn crawl 
   [starturl depth number-of-concurrent-requests print-results]
@@ -104,7 +125,7 @@
             (-> (assoc crawldata (:url (first crawlQueue)) siteDataSet) (assoc :amountOfUrlsCrawled (inc (:amountOfUrlsCrawled crawldata)))))))))))
 
 (defn -main 
-  "Call like this: lein run 'http://www.peterfessel.com' 2 5
+  "Call like this: lein run 'http://www.peterfessel.com' 5 20
 
   First argument has to be the start url, second the search depth.
 
@@ -115,4 +136,7 @@
       (nth args 0) 
       (Integer/parseInt (nth args 1))
       (if (<= (count args) 2) number-of-concurrent-requests (Integer/parseInt (nth args 2)))
-      true))))
+      true)))
+  #_(binding [maximum-crawl-depth (Integer/parseInt (nth args 1))
+      number-of-concurrent-requests (if (<= (count args) 2) number-of-concurrent-requests (Integer/parseInt (nth args 2)))]
+      (launch-crawl (nth args 0) maximum-crawl-depth number-of-concurrent-requests)))
