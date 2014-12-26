@@ -8,6 +8,12 @@
 
 (declare launch-next-crawl)
 
+;; contains the already crawled urls to a certain size
+(def crawled-urls (atom #{}))
+;; a queue containing the urls found in the crawling process
+;; the queue contains 'raw' urls as strings with the crawl depth associated as meta data
+(def urls-to-be-crawled (agent (clojure.lang.PersistentQueue/EMPTY)))
+
 ;; running-requests contains the futures of running Http GETs with the crawled url as key
 ;; can be seen as a thread pool
 (def running-requests (add-watch (atom {}) :requests-watch 
@@ -15,14 +21,17 @@
   (fn [key identity old new]
     (println "Concurrent requests: " (count new))
     (println identity)
-    #_(if (< (count new) number-of-concurrent-requests)
-    (launch-next-crawl)))))
-
-;; contains the already crawled urls to a certain size
-(def crawled-urls (atom #{}))
-;; a queue containing the urls found in the crawling process
-;; the queue contains 'raw' urls as strings with the crawl depth associated as meta data
-(def urls-to-be-crawled (agent (clojure.lang.PersistentQueue/EMPTY)))
+    (println "queue length: " (count @urls-to-be-crawled))
+    ;; automatically launch next crawl if the current number of current requests is smaller than the previous number,
+    ;; but only if it's smaller than the maximum number of current requests
+    (if (and (< (count new) (count old)) (< (count new) number-of-concurrent-requests))
+    ;; if there is no content (yet) in the queue, wait for all agent actions to finish
+    (if (< (count @urls-to-be-crawled) 1)
+      (do
+        (println "await urls-to-be-crawled")
+        (await urls-to-be-crawled)
+        (launch-next-crawl))
+      (launch-next-crawl))))))
 
 (defn is-url-already-crawled?
   "Checks if a url has already been crawled by checking the crawled urls atom.
@@ -30,12 +39,12 @@
   return true if the crawl has been 'recent'."
   ;; later this method could additionally make a db query to check if a url already has been crawled
   [url]
-  (contains? @crawled-urls url))
+  (contains? @crawled-urls (:url url)))
 
 (defn maximum-depth-reached?
   "Checks if the first element of the crawl queue has reached the maximum crawl depth."
   [url-queue]
-  (> (:depth (meta (first url-queue))) maximum-crawl-depth))
+  (> (:depth (first url-queue)) maximum-crawl-depth))
 
 (defn register-crawled-url
   "Adds a url that has already been crawled to the crawled-urls atom,
@@ -48,7 +57,7 @@
   "Adds an unordered set of links to the urls-to-be-crawled agent.
   Sets the :depth meta data of the links according to the depth passed as second argument."
   [url-queue links depth]
-  (into url-queue (map #(hash-map :url % :depth depth) links))) ; @url-queue ?
+  (into url-queue (map #(hash-map :url % :depth depth) links)))
 
 (defn fire-request
   "Launches the GET of a url in a new future that is then stored in the running-requests atom.
@@ -74,16 +83,16 @@
   Takes as an argument the url queue, so it can be applied to the agent containing the queue."
   [url-queue]
   ;; run a loop over the url-queue until the next url that hasn't been crawled yet is found
-  (loop [url-queue url-queue]
-    (if (< (count url-queue) 1)
-      (throw (Exception. "No more urls to crawl in the url queue.")) ; TO DO: start a new thread, wait some time, then try again, if still empty throw an error
-      (if (is-url-already-crawled? (first url-queue))
-        (recur (pop url-queue))
-        (if (maximum-depth-reached? url-queue)
-          (throw (Exception. "Maximum crawl depth reached."))
-          (do
-            (fire-request (first url-queue))
-            (pop url-queue)))))))
+  (loop [queue url-queue]
+    (if (< (count queue) 1)
+      (throw (Exception. "No more urls to crawl in the url queue."))
+        (if (not (is-url-already-crawled? (first queue)))
+          (if (maximum-depth-reached? queue)
+            (throw (Exception. "Maximum crawl depth reached."))
+            (do
+              (fire-request (first queue))
+              (pop queue)))
+          (recur (pop queue))))))
 
 (defn launch-next-crawl
   "Starts a crawl of the next url."
