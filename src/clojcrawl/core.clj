@@ -15,7 +15,7 @@
   (fn [key identity old new]
     (println "Concurrent requests: " (count new))
     (println identity)
-    (if (< (count new) number-of-concurrent-requests)
+    #_(if (< (count new) number-of-concurrent-requests)
     (launch-next-crawl)))))
 
 ;; contains the already crawled urls to a certain size
@@ -48,7 +48,7 @@
   "Adds an unordered set of links to the urls-to-be-crawled agent.
   Sets the :depth meta data of the links according to the depth passed as second argument."
   [url-queue links depth]
-  (into url-queue (map #(hash-map :url % :depth depth) links))) ; @url-queue?
+  (into url-queue (map #(hash-map :url % :depth depth) links))) ; @url-queue ?
 
 (defn fire-request
   "Launches the GET of a url in a new future that is then stored in the running-requests atom.
@@ -56,16 +56,16 @@
   watch on the atom can launch the next GET (take-url). When the future is realized, it will
   trigger the parsing of the retreived data."
   [url]
-  (register-crawled-url (:url url))
-  (swap! running-requests assoc (:url url)
-    (future 
-      (let [crawldata (parser/do-parse (:body @(http-kit/get (:url url))) (:depth url))]
-        (println "content retrieved from:" (:url url))
-        #_(send urls-to-be-crawled add-links-to-crawl-queue (:links crawldata) (:depth url))
-        (println "links sent to queue")
-        (data-sink/print-report (:url url) crawldata)
-        ;; then remove this future from the running-requests atom
-        (swap! running-requests dissoc (:url url))))))
+  (let [url-string (:url url)
+        depth (:depth url)]
+    (register-crawled-url url-string)
+    (swap! running-requests assoc url-string
+      (future 
+        (let [crawldata (parser/do-parse (:body @(http-kit/get url-string)) depth)]
+          (send urls-to-be-crawled add-links-to-crawl-queue (:links crawldata) depth)
+          (data-sink/print-report url-string crawldata))
+          ;; then remove this future from the running-requests atom
+          (swap! running-requests dissoc url-string)))))
 
 (defn take-url
   "Launches a crawl of the next url on the crawl queue. The method makes sure to only crawl urls which 
@@ -108,6 +108,7 @@
       (launch-crawl (nth args 0) maximum-crawl-depth number-of-concurrent-requests))
     (catch Exception e 
       (do
+        (println (agent-error urls-to-be-crawled))
         (shutdown-agents)
         (println "\nCrawler shut down. Reason: " (.getMessage e))
         (println "\nStack trace: " (.printStackTrace e))))))
