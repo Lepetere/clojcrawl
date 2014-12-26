@@ -84,9 +84,4 @@
                 ;add a potentially found link address to the link set
                   (conj links (process-tag (subs datastring (inc nextposition) oneFurtherPosition)))))
         ;quit loop and return hash map with the crawl data
-        (sorted-map :depth depth, :keywords keywords, :links (filter #(and (not (or (= % "") (nil? %))) (.startsWith % "http:")) links)))))
-
-;; TO DO:
-;; Prefer higher-order functions like map to loop/recur.
-;; Prefer the use of the threading macros -> (thread-first) and ->> (thread-last) to heavy form nesting.
-;; Use lisp-case for function and variable names.
+        (sorted-map :depth depth, :keywords keywords, :links (filter #(and (not (or (= % "") (nil? %) (.endsWith % ".pdf"))) (.startsWith % "http:")) links)))))
