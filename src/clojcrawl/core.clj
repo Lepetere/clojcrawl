@@ -22,16 +22,16 @@
     (println "Concurrent requests: " (count new))
     (println identity)
     (println "queue length: " (count @urls-to-be-crawled))
-    ;; automatically launch next crawl if the current number of current requests is smaller than the previous number,
-    ;; but only if it's smaller than the maximum number of current requests
-    (if (and (< (count new) (count old)) (< (count new) number-of-concurrent-requests))
-    ;; if there is no content (yet) in the queue, wait for all agent actions to finish
-    (if (< (count @urls-to-be-crawled) 1)
-      (do
-        (println "await urls-to-be-crawled")
-        (await urls-to-be-crawled)
-        (launch-next-crawl))
-      (launch-next-crawl))))))
+    ;; automatically launch next crawl if the current number of requests is smaller than the maximum number of current requests
+    (if (and (< (count new) number-of-concurrent-requests) (> (count @urls-to-be-crawled) 0))
+      ;; if there is no content (yet) in the queue, wait for all agent actions to finish
+      (if (< (count @urls-to-be-crawled) 1)
+        (do
+          (println "await urls-to-be-crawled")
+          (await urls-to-be-crawled)
+          (if (< (count @urls-to-be-crawled) 1)
+            (launch-next-crawl)))
+        (launch-next-crawl))))))
 
 (defn is-url-already-crawled?
   "Checks if a url has already been crawled by checking the crawled urls atom.
