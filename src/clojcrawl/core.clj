@@ -19,9 +19,7 @@
 (def running-requests (add-watch (atom {}) :requests-watch 
   ;; observe the size of running-requests and launch new requests
   (fn [key identity old new]
-    (println "Concurrent requests: " (count new))
-    (println identity)
-    (println "queue length: " (count @urls-to-be-crawled))
+    (println "Concurrent requests: " (count new) ", queue length: " (count @urls-to-be-crawled))
     ;; automatically launch next crawl if the current number of requests is smaller than the maximum number of current requests
     (if (and (< (count new) number-of-concurrent-requests) (> (count @urls-to-be-crawled) 0))
       ;; if there is no content (yet) in the queue, wait for all agent actions to finish
@@ -72,7 +70,7 @@
       (future 
         (let [crawldata (parser/do-parse (:body @(http-kit/get url-string)) depth)]
           (send urls-to-be-crawled add-links-to-crawl-queue (:links crawldata) depth)
-          (data-sink/print-report url-string crawldata))
+          (data-sink/print-short-report url-string crawldata))
           ;; then remove this future from the running-requests atom
           (swap! running-requests dissoc url-string)))))
 
