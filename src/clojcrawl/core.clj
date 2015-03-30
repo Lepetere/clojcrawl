@@ -8,11 +8,13 @@
 
 (declare launch-next-crawl)
 
-;; contains the already crawled urls to a certain size
+;; contains the already crawled urls up to a certain size
 (def crawled-urls (atom #{}))
 ;; a queue containing the urls found in the crawling process
 ;; the queue contains 'raw' urls as strings with the crawl depth associated as meta data
-(def urls-to-be-crawled (agent (clojure.lang.PersistentQueue/EMPTY)))
+(def urls-to-be-crawled (agent (clojure.lang.PersistentQueue/EMPTY) :error-handler
+  (fn [_agent exception]
+    (println (.getMessage exception)))))
 
 ;; running-requests contains the futures of running Http GETs with the crawled url as key
 ;; can be seen as a thread pool
@@ -69,7 +71,7 @@
     (swap! running-requests assoc url-string
       (future 
         (let [crawldata (parser/do-parse (:body @(http-kit/get url-string)) depth)]
-          (send urls-to-be-crawled add-links-to-crawl-queue (:links crawldata) depth)
+          (send urls-to-be-crawled add-links-to-crawl-queue (:links crawldata) (inc depth))
           (data-sink/print-short-report url-string crawldata))
           ;; then remove this future from the running-requests atom
           (swap! running-requests dissoc url-string)))))
